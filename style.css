@@ -22,7 +22,8 @@ input, button, select, textarea, table, legend, label {
 /* ---- تنسيق جميع حقول الإدخال النصية من مكان واحد ---- */
 input[type="text"],
 input[type="email"],
-input[type="tel"] {
+input[type="tel"],
+select {
   color: #0b3d6b;                 /* لون النص المُدخل */
   background-color: #fdfefe;
   border: 1px solid #8fa8c0;

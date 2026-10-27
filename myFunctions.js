@@ -63,8 +63,16 @@ function validateName(value) {
   return "";
 }
 
+// المحافظات ورموزها (أول خانتين من الرقم الوطني)
+var PROVINCES = {
+  "01": "دمشق", "02": "حلب", "03": "ريف دمشق", "04": "حمص", "05": "حماة",
+  "06": "اللاذقية", "07": "إدلب", "08": "الحسكة", "09": "دير الزور", "10": "طرطوس",
+  "11": "الرقة", "12": "درعا", "13": "السويداء", "14": "القنيطرة"
+};
+
 // الرقم الوطني: 11 خانة، أول خانتين = رمز المحافظة من 01 إلى 14 (إلزامي)
-function validateNationalId(value) {
+// وإذا اختار المستخدم محافظة يجب أن يطابق رمزها أول خانتين من الرقم
+function validateNationalId(value, provinceCode) {
   if (value === "") {
     return "الرقم الوطني إلزامي.";
   }
@@ -74,9 +82,13 @@ function validateNationalId(value) {
   if (value.length !== 11) {
     return "الرقم الوطني يجب أن يتكون من 11 خانة (المُدخل: " + value.length + ").";
   }
-  var province = parseInt(value.substring(0, 2), 10);
+  var prefix = value.substring(0, 2);
+  var province = parseInt(prefix, 10);
   if (province < 1 || province > 14) {
     return "أول خانتين من الرقم الوطني ترمزان إلى المحافظة ويجب أن تكونا بين 01 و 14.";
+  }
+  if (provinceCode !== "" && provinceCode !== undefined && prefix !== provinceCode) {
+    return "الرقم الوطني لا يطابق المحافظة المختارة (" + PROVINCES[provinceCode] + ")، يجب أن يبدأ بالرمز " + provinceCode + ".";
   }
   return "";
 }
@@ -98,15 +110,34 @@ function parseDate(value) {
   return date;
 }
 
+// تاريخ اليوم (بتوقيت جهاز المستخدم) كتاريخ UTC بدون وقت
+function getToday() {
+  var now = new Date();
+  return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+}
+
+// التحقق من أن التاريخ ليس قديماً وأنه ضمن السنة الحالية
+function checkDateRange(date) {
+  var today = getToday();
+  if (date.getTime() < today.getTime()) {
+    return "لا يمكن إدخال تاريخ قديم؛ يجب أن يكون التاريخ اليوم أو بعده.";
+  }
+  if (date.getUTCFullYear() !== today.getUTCFullYear()) {
+    return "يجب أن يكون التاريخ ضمن السنة الحالية (" + today.getUTCFullYear() + ").";
+  }
+  return "";
+}
+
 // تاريخ البداية (إلزامي)
 function validateStartDate(value) {
   if (value === "") {
     return "تاريخ بداية التأجير إلزامي.";
   }
-  if (parseDate(value) === null) {
+  var start = parseDate(value);
+  if (start === null) {
     return "الصيغة غير صحيحة، يجب أن يكون التاريخ بالشكل yyyy-mm-dd وتاريخاً حقيقياً.";
   }
-  return "";
+  return checkDateRange(start);
 }
 
 // تاريخ النهاية (إلزامي ويجب أن يكون لاحقاً للبداية)
@@ -118,9 +149,13 @@ function validateEndDate(value, startValue) {
   if (end === null) {
     return "الصيغة غير صحيحة، يجب أن يكون التاريخ بالشكل yyyy-mm-dd وتاريخاً حقيقياً.";
   }
+  var rangeError = checkDateRange(end);
+  if (rangeError !== "") {
+    return rangeError;
+  }
   var start = parseDate(startValue);
   if (start !== null && end.getTime() <= start.getTime()) {
-    return "تاريخ النهاية يجب أن يكون لاحقاً لتاريخ البداية.";
+    return "تاريخ النهاية (تسليم السيارة) يجب أن يكون بعد تاريخ البداية، ولا يقبل أن يساوي تاريخ الاستلام أو يسبقه.";
   }
   return "";
 }
@@ -230,7 +265,7 @@ function readField(fieldId, keepArabicDigits) {
 function validateForm() {
   var errors = {};
   errors.fullName = validateName(readField("fullName", true));
-  errors.nationalId = validateNationalId(readField("nationalId", false));
+  errors.nationalId = validateNationalId(readField("nationalId", false), $("#province").val());
   errors.startDate = validateStartDate(readField("startDate", false));
   errors.endDate = validateEndDate(readField("endDate", false), readField("startDate", false));
   errors.mobile = validateMobile(readField("mobile", false));
@@ -350,8 +385,12 @@ $(document).ready(function () {
 
   // التحقق الفوري عند مغادرة الحقل
   $("#fullName").blur(function () { showError("fullName", validateName(readField("fullName", true))); });
-  $("#nationalId").blur(function () { showError("nationalId", validateNationalId(readField("nationalId", false))); });
-  $("#startDate").blur(function () { showError("startDate", validateStartDate(readField("startDate", false))); });
+  $("#nationalId, #province").blur(function () { showError("nationalId", validateNationalId(readField("nationalId", false), $("#province").val())); });
+  $("#province").change(function () { if (readField("nationalId", false) !== "") { showError("nationalId", validateNationalId(readField("nationalId", false), $("#province").val())); } });
+  $("#startDate").blur(function () {
+    showError("startDate", validateStartDate(readField("startDate", false)));
+    if (readField("endDate", false) !== "") { showError("endDate", validateEndDate(readField("endDate", false), readField("startDate", false))); }
+  });
   $("#endDate").blur(function () { showError("endDate", validateEndDate(readField("endDate", false), readField("startDate", false))); });
   $("#mobile").blur(function () { showError("mobile", validateMobile(readField("mobile", false))); });
   $("#email").blur(function () { showError("email", validateEmail(readField("email", false))); });
